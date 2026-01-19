@@ -140,3 +140,6 @@ export const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
+
+// Default export for Fast Refresh compatibility
+export default AuthProvider;
