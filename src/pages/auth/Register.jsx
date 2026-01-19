@@ -1,10 +1,9 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { authAPI } from "../../services/api";
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -73,14 +72,19 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const result = await register(formData);
+      // Prepare data for API (exclude confirmPassword)
+      const { ...registrationData } = formData;
+
+      const result = await authAPI.register(registrationData);
 
       if (result.success) {
         setSuccess(true);
-        // Redirect to login after 2 seconds
+        // Redirect to dashboard after 2 seconds
         setTimeout(() => {
-          navigate("/login");
+          navigate("/dashboard");
         }, 2000);
+      } else {
+        setError(result.message || "Registration failed. Please try again.");
       }
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
@@ -133,7 +137,7 @@ const Register = () => {
               />
             </svg>
             <span className="text-sm">
-              Registration successful! Redirecting to login...
+              Registration successful! Redirecting to dashboard...
             </span>
           </div>
         </div>

@@ -1,20 +1,117 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { mockStats, mockProjects, getProjectsByUser } from "../../mock/data";
+import { useAuth } from "../../context/useAuth";
+import { projectAPI, evaluationAPI } from "../../services/api";
 
 const SupervisorDashboard = () => {
   const { user } = useAuth();
-  const supervisedProjects = getProjectsByUser(user?.id, "supervisor");
-  const stats = mockStats.supervisor;
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalProjects: 0,
+    pendingReviews: 0,
+    completedEvaluations: 0,
+    studentsSupervised: 0,
+  });
+  const [projects, setProjects] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchDashboardData();
+    }
+  }, [user?.id]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch supervisor's projects using projectAPI
+      const projectsResponse = await projectAPI.getAll({
+        supervisorId: user?.id,
+      });
+
+      const supervisedProjects = projectsResponse.data || [];
+      setProjects(supervisedProjects);
+
+      // Fetch evaluations completed by this supervisor
+      const evaluationsResponse =
+        await evaluationAPI.getCompletedBySupervisor();
+      const completedEvaluations = evaluationsResponse.data || [];
+
+      // Calculate stats
+      const pendingProjects = supervisedProjects.filter(
+        (p) => p.status === "submitted" || p.status === "under_review",
+      );
+
+      // Get unique students
+      const uniqueStudents = new Set(
+        supervisedProjects.map((p) => p.studentId),
+      );
+
+      setStats({
+        totalProjects: supervisedProjects.length,
+        pendingReviews: pendingProjects.length,
+        completedEvaluations: completedEvaluations.length,
+        studentsSupervised: uniqueStudents.size,
+      });
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+      setError(err.message || "Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Get projects needing review
-  const pendingProjects = supervisedProjects.filter(
-    (p) => p.status === "submitted" || p.status === "under_review"
+  const pendingProjects = projects.filter(
+    (p) => p.status === "submitted" || p.status === "under_review",
   );
 
-  // Get recent projects
-  const recentProjects = supervisedProjects.slice(0, 3);
+  // Get recent projects (last 3)
+  const recentProjects = projects.slice(0, 3);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex">
+          <svg
+            className="h-5 w-5 text-red-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">
+              Error loading dashboard
+            </h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <button
+              onClick={fetchDashboardData}
+              className="mt-2 text-sm text-red-600 hover:text-red-500 font-medium"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -202,7 +299,7 @@ const SupervisorDashboard = () => {
                           <span>
                             Submitted:{" "}
                             {new Date(
-                              project.submissionDate
+                              project.submissionDate,
                             ).toLocaleDateString()}
                           </span>
                         </>
@@ -254,10 +351,12 @@ const SupervisorDashboard = () => {
                           project.status === "in_progress"
                             ? "bg-blue-100 text-blue-800"
                             : project.status === "submitted"
-                            ? "bg-green-100 text-green-800"
-                            : project.status === "draft"
-                            ? "bg-gray-100 text-gray-800"
-                            : "bg-yellow-100 text-yellow-800"
+                              ? "bg-green-100 text-green-800"
+                              : project.status === "draft"
+                                ? "bg-gray-100 text-gray-800"
+                                : project.status === "approved"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-yellow-100 text-yellow-800"
                         }`}
                       >
                         {project.status.replace("_", " ").toUpperCase()}
@@ -340,7 +439,10 @@ const SupervisorDashboard = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer">
+        <Link
+          to="/supervisor/projects?status=submitted"
+          className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+        >
           <div className="flex items-center mb-3">
             <div className="w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center mr-3">
               <svg
@@ -362,9 +464,12 @@ const SupervisorDashboard = () => {
           <p className="text-sm text-gray-600">
             Review student progress and give constructive feedback
           </p>
-        </div>
+        </Link>
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer">
+        <Link
+          to="/supervisor/projects?status=submitted"
+          className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+        >
           <div className="flex items-center mb-3">
             <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center mr-3">
               <svg
@@ -386,9 +491,12 @@ const SupervisorDashboard = () => {
           <p className="text-sm text-gray-600">
             Grade completed projects and submit evaluations
           </p>
-        </div>
+        </Link>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer">
+        <Link
+          to="/supervisor/projects"
+          className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+        >
           <div className="flex items-center mb-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
               <svg
@@ -410,7 +518,7 @@ const SupervisorDashboard = () => {
           <p className="text-sm text-gray-600">
             View and track all students under your supervision
           </p>
-        </div>
+        </Link>
       </div>
     </div>
   );

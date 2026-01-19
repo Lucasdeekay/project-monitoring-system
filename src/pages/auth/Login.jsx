@@ -1,10 +1,9 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { authAPI } from "../../services/api";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
 
   const [formData, setFormData] = useState({
     email: "",
@@ -12,6 +11,7 @@ const Login = () => {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Handle input changes
   const handleChange = (e) => {
@@ -30,19 +30,32 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
+      // Call authAPI.login directly
+      const result = await authAPI.login(formData.email, formData.password);
 
       if (result.success) {
+        // Store remember me preference
+        if (rememberMe) {
+          localStorage.setItem("rememberMe", "true");
+        }
+
         // Redirect based on user role
         const dashboardRoutes = {
           student: "/student/dashboard",
           supervisor: "/supervisor/dashboard",
           admin: "/admin/dashboard",
         };
-        navigate(dashboardRoutes[result.user.role]);
+
+        const userRole = result.data?.user?.role;
+        const redirectPath = dashboardRoutes[userRole] || "/dashboard";
+
+        navigate(redirectPath, { replace: true });
+      } else {
+        setError(result.message || "Login failed. Please try again.");
       }
     } catch (err) {
-      setError(err.message || "Invalid email or password");
+      console.error("Login error:", err);
+      setError(err.message || "Invalid email or password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -52,8 +65,27 @@ const Login = () => {
     <div>
       {/* Header */}
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
-        <p className="text-gray-600 mt-2">Sign in to your account</p>
+        <div className="flex items-center justify-center mb-4">
+          <div className="w-16 h-16 bg-violet-600 rounded-xl flex items-center justify-center">
+            <svg
+              className="w-10 h-10 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </div>
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
+        <p className="text-gray-600 mt-2">
+          Sign in to your account to continue
+        </p>
       </div>
 
       {/* Error Alert */}
@@ -61,7 +93,7 @@ const Login = () => {
         <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           <div className="flex items-center">
             <svg
-              className="w-5 h-5 mr-2"
+              className="w-5 h-5 mr-2 flex-shrink-0"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -76,22 +108,6 @@ const Login = () => {
         </div>
       )}
 
-      {/* Demo Credentials Info */}
-      <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
-        <p className="text-sm font-semibold mb-2">Demo Credentials:</p>
-        <div className="text-xs space-y-1">
-          <p>
-            <strong>Student:</strong> student@example.com / password
-          </p>
-          <p>
-            <strong>Supervisor:</strong> supervisor@example.com / password
-          </p>
-          <p>
-            <strong>Admin:</strong> admin@example.com / password
-          </p>
-        </div>
-      </div>
-
       {/* Login Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Email Field */}
@@ -102,16 +118,33 @@ const Login = () => {
           >
             Email Address
           </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
-            placeholder="Enter your email"
-          />
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg
+                className="h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
+                />
+              </svg>
+            </div>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
+              placeholder="Enter your email"
+            />
+          </div>
         </div>
 
         {/* Password Field */}
@@ -122,16 +155,33 @@ const Login = () => {
           >
             Password
           </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
-            placeholder="Enter your password"
-          />
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg
+                className="h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            </div>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
+              placeholder="Enter your password"
+            />
+          </div>
         </div>
 
         {/* Remember Me and Forgot Password */}
@@ -141,22 +191,24 @@ const Login = () => {
               id="remember"
               name="remember"
               type="checkbox"
-              className="h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300 rounded"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300 rounded cursor-pointer"
             />
             <label
               htmlFor="remember"
-              className="ml-2 block text-sm text-gray-700"
+              className="ml-2 block text-sm text-gray-700 cursor-pointer"
             >
               Remember me
             </label>
           </div>
           <div className="text-sm">
-            <a
-              href="#"
+            <Link
+              to="/forgot-password"
               className="text-violet-600 hover:text-violet-700 font-medium"
             >
               Forgot password?
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -164,7 +216,7 @@ const Login = () => {
         <button
           type="submit"
           disabled={loading}
-          className="w-full flex justify-center items-center px-4 py-3 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full flex justify-center items-center px-4 py-3 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
         >
           {loading ? (
             <>
@@ -190,7 +242,22 @@ const Login = () => {
               Signing in...
             </>
           ) : (
-            "Sign In"
+            <>
+              <span>Sign In</span>
+              <svg
+                className="ml-2 w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M14 5l7 7m0 0l-7 7m7-7H3"
+                />
+              </svg>
+            </>
           )}
         </button>
       </form>
@@ -201,10 +268,24 @@ const Login = () => {
           Don't have an account?{" "}
           <Link
             to="/register"
-            className="text-violet-600 hover:text-violet-700 font-medium"
+            className="text-violet-600 hover:text-violet-700 font-semibold hover:underline"
           >
             Register here
           </Link>
+        </p>
+      </div>
+
+      {/* Additional Info */}
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        <p className="text-xs text-center text-gray-500">
+          By signing in, you agree to our{" "}
+          <a href="#" className="text-violet-600 hover:underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="#" className="text-violet-600 hover:underline">
+            Privacy Policy
+          </a>
         </p>
       </div>
     </div>

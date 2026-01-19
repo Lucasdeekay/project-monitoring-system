@@ -1,25 +1,70 @@
-import React, { useState } from "react";
-import { mockStats, mockProjects, mockUsers } from "../../mock/data";
+import React, { useState, useEffect } from "react";
+import api from "../../services/api";
 
 const AdminReports = () => {
   const [selectedReport, setSelectedReport] = useState("overview");
-  const stats = mockStats.admin;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reportData, setReportData] = useState({
+    dashboard: null,
+    projects: [],
+  });
 
-  // Calculate additional statistics
+  useEffect(() => {
+    fetchReportData();
+  }, []);
+
+  const fetchReportData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch dashboard statistics
+      const dashboardRes = await api.get("/reports/dashboard");
+
+      // Fetch all projects for detailed analysis
+      const projectsRes = await api.get("/projects", {
+        params: { limit: 100 },
+      });
+
+      setReportData({
+        dashboard: dashboardRes.data,
+        projects: projectsRes.data || [],
+      });
+    } catch (err) {
+      console.error("Error fetching report data:", err);
+      setError(err.message || "Failed to load report data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const calculateStats = () => {
-    const totalProjects = mockProjects.length;
-    const completedProjects = mockProjects.filter(
-      (p) => p.status === "approved"
+    if (!reportData.projects.length) {
+      return {
+        totalProjects: 0,
+        completedProjects: 0,
+        inProgressProjects: 0,
+        submittedProjects: 0,
+        avgProgress: 0,
+        completionRate: 0,
+      };
+    }
+
+    const totalProjects = reportData.projects.length;
+    const completedProjects = reportData.projects.filter(
+      (p) => p.status === "approved",
     ).length;
-    const inProgressProjects = mockProjects.filter(
-      (p) => p.status === "in_progress"
+    const inProgressProjects = reportData.projects.filter(
+      (p) => p.status === "in_progress",
     ).length;
-    const submittedProjects = mockProjects.filter(
-      (p) => p.status === "submitted" || p.status === "under_review"
+    const submittedProjects = reportData.projects.filter(
+      (p) => p.status === "submitted" || p.status === "under_review",
     ).length;
 
     const avgProgress =
-      mockProjects.reduce((sum, p) => sum + p.progress, 0) / totalProjects;
+      reportData.projects.reduce((sum, p) => sum + (p.progress || 0), 0) /
+      totalProjects;
 
     return {
       totalProjects,
@@ -27,10 +72,70 @@ const AdminReports = () => {
       inProgressProjects,
       submittedProjects,
       avgProgress: Math.round(avgProgress),
-      completionRate: Math.round((completedProjects / totalProjects) * 100),
+      completionRate:
+        totalProjects > 0
+          ? Math.round((completedProjects / totalProjects) * 100)
+          : 0,
     };
   };
 
+  const handleExportPDF = () => {
+    alert("PDF export functionality will be implemented with a PDF library");
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      // You can call a specific endpoint for report generation
+      alert("Report generated successfully!");
+    } catch (err) {
+      console.error("Error generating report:", err);
+      alert("Failed to generate report");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+        <div className="flex">
+          <svg
+            className="h-5 w-5 text-red-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">
+              Error loading reports
+            </h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <button
+              onClick={fetchReportData}
+              className="mt-2 text-sm text-red-600 hover:text-red-500 font-medium"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = reportData.dashboard || {};
   const calculatedStats = calculateStats();
 
   return (
@@ -46,7 +151,10 @@ const AdminReports = () => {
           </p>
         </div>
         <div className="flex gap-3">
-          <button className="inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+          <button
+            onClick={handleExportPDF}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
             <svg
               className="w-5 h-5 mr-2"
               fill="none"
@@ -62,7 +170,10 @@ const AdminReports = () => {
             </svg>
             Export PDF
           </button>
-          <button className="inline-flex items-center px-4 py-2 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors">
+          <button
+            onClick={handleGenerateReport}
+            className="inline-flex items-center px-4 py-2 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
             <svg
               className="w-5 h-5 mr-2"
               fill="none"
@@ -97,7 +208,7 @@ const AdminReports = () => {
               >
                 {report} Report
               </button>
-            )
+            ),
           )}
         </div>
       </div>
@@ -129,7 +240,7 @@ const AdminReports = () => {
                 </div>
               </div>
               <p className="text-3xl font-bold text-gray-900">
-                {calculatedStats.totalProjects}
+                {stats.totalProjects || 0}
               </p>
               <p className="text-sm text-gray-500 mt-2">
                 All registered projects
@@ -212,7 +323,7 @@ const AdminReports = () => {
                 </div>
               </div>
               <p className="text-3xl font-bold text-gray-900">
-                {calculatedStats.avgProgress}%
+                {stats.averageProgress || calculatedStats.avgProgress}%
               </p>
               <p className="text-sm text-gray-500 mt-2">Overall progress</p>
             </div>
@@ -226,19 +337,21 @@ const AdminReports = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center p-6 bg-blue-50 rounded-lg">
                 <p className="text-4xl font-bold text-blue-600">
-                  {stats.totalStudents}
+                  {stats.totalStudents || 0}
                 </p>
                 <p className="text-sm text-gray-600 mt-2">Total Students</p>
               </div>
               <div className="text-center p-6 bg-green-50 rounded-lg">
                 <p className="text-4xl font-bold text-green-600">
-                  {stats.totalSupervisors}
+                  {stats.totalSupervisors || 0}
                 </p>
                 <p className="text-sm text-gray-600 mt-2">Total Supervisors</p>
               </div>
               <div className="text-center p-6 bg-purple-50 rounded-lg">
                 <p className="text-4xl font-bold text-purple-600">
-                  {(stats.totalStudents / stats.totalSupervisors).toFixed(1)}
+                  {stats.totalSupervisors > 0
+                    ? (stats.totalStudents / stats.totalSupervisors).toFixed(1)
+                    : "0"}
                 </p>
                 <p className="text-sm text-gray-600 mt-2">
                   Student-Supervisor Ratio
@@ -248,42 +361,50 @@ const AdminReports = () => {
           </div>
 
           {/* Project Status Distribution */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">
-              Project Status Distribution
-            </h2>
-            <div className="space-y-4">
-              {Object.entries(stats.projectsByStatus).map(([status, count]) => {
-                const percentage = (count / stats.totalProjects) * 100;
-                const colors = {
-                  draft: "bg-gray-500",
-                  in_progress: "bg-blue-500",
-                  submitted: "bg-green-500",
-                  under_review: "bg-yellow-500",
-                  approved: "bg-emerald-500",
-                  rejected: "bg-red-500",
-                };
-                return (
-                  <div key={status}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700 capitalize">
-                        {status.replace("_", " ")}
-                      </span>
-                      <span className="text-sm text-gray-600">
-                        {count} projects ({percentage.toFixed(1)}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className={`${colors[status]} h-3 rounded-full transition-all`}
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {stats.projectsByStatus &&
+            Object.keys(stats.projectsByStatus).length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6">
+                  Project Status Distribution
+                </h2>
+                <div className="space-y-4">
+                  {Object.entries(stats.projectsByStatus).map(
+                    ([status, count]) => {
+                      const percentage =
+                        stats.totalProjects > 0
+                          ? (count / stats.totalProjects) * 100
+                          : 0;
+                      const colors = {
+                        draft: "bg-gray-500",
+                        in_progress: "bg-blue-500",
+                        submitted: "bg-green-500",
+                        under_review: "bg-yellow-500",
+                        approved: "bg-emerald-500",
+                        rejected: "bg-red-500",
+                      };
+                      return (
+                        <div key={status}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 capitalize">
+                              {status.replace("_", " ")}
+                            </span>
+                            <span className="text-sm text-gray-600">
+                              {count} projects ({percentage.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div
+                              className={`${colors[status] || "bg-gray-500"} h-3 rounded-full transition-all`}
+                              style={{ width: `${percentage}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            )}
         </div>
       )}
 
@@ -304,28 +425,28 @@ const AdminReports = () => {
                   {[
                     {
                       range: "0-25%",
-                      count: mockProjects.filter(
-                        (p) => p.progress >= 0 && p.progress < 25
+                      count: reportData.projects.filter(
+                        (p) => p.progress >= 0 && p.progress < 25,
                       ).length,
                       color: "bg-red-500",
                     },
                     {
                       range: "25-50%",
-                      count: mockProjects.filter(
-                        (p) => p.progress >= 25 && p.progress < 50
+                      count: reportData.projects.filter(
+                        (p) => p.progress >= 25 && p.progress < 50,
                       ).length,
                       color: "bg-yellow-500",
                     },
                     {
                       range: "50-75%",
-                      count: mockProjects.filter(
-                        (p) => p.progress >= 50 && p.progress < 75
+                      count: reportData.projects.filter(
+                        (p) => p.progress >= 50 && p.progress < 75,
                       ).length,
                       color: "bg-blue-500",
                     },
                     {
                       range: "75-100%",
-                      count: mockProjects.filter((p) => p.progress >= 75)
+                      count: reportData.projects.filter((p) => p.progress >= 75)
                         .length,
                       color: "bg-green-500",
                     },
@@ -379,57 +500,61 @@ const AdminReports = () => {
           </div>
 
           {/* Recent Projects Table */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Recent Project Updates
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Project
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Student
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Progress
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Last Updated
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {mockProjects.slice(0, 5).map((project) => (
-                    <tr key={project.id}>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {project.title}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {project.studentName}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <span className="capitalize">
-                          {project.status.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium">
-                        {project.progress}%
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {new Date(project.updatedAt).toLocaleDateString()}
-                      </td>
+          {reportData.projects.length > 0 && (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Recent Project Updates
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Project
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Student
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Progress
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Last Updated
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {reportData.projects.slice(0, 5).map((project) => (
+                      <tr key={project.id}>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                          {project.title}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {project.studentName}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className="capitalize">
+                            {project.status.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-medium">
+                          {project.progress}%
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {project.updatedAt
+                            ? new Date(project.updatedAt).toLocaleDateString()
+                            : "N/A"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -441,28 +566,34 @@ const AdminReports = () => {
               Department Analytics
             </h2>
             <div className="space-y-6">
-              {Object.entries(stats.projectsByDepartment).map(
-                ([department, count]) => {
-                  const percentage = (count / stats.totalProjects) * 100;
-                  const deptProjects = mockProjects.filter(
-                    (p) => p.department === department
+              {stats.projectsByDepartment &&
+              stats.projectsByDepartment.length > 0 ? (
+                stats.projectsByDepartment.map((dept) => {
+                  const percentage =
+                    stats.totalProjects > 0
+                      ? (dept.count / stats.totalProjects) * 100
+                      : 0;
+                  const deptProjects = reportData.projects.filter(
+                    (p) => p.department === dept.department,
                   );
                   const avgProgress =
-                    deptProjects.reduce((sum, p) => sum + p.progress, 0) /
-                    count;
+                    deptProjects.length > 0
+                      ? deptProjects.reduce((sum, p) => sum + p.progress, 0) /
+                        deptProjects.length
+                      : 0;
 
                   return (
                     <div
-                      key={department}
+                      key={dept.department}
                       className="border border-gray-200 rounded-lg p-6"
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900">
-                            {department}
+                            {dept.department}
                           </h3>
                           <p className="text-sm text-gray-600 mt-1">
-                            {count} projects ({percentage.toFixed(1)}%)
+                            {dept.count} projects ({percentage.toFixed(1)}%)
                           </p>
                         </div>
                         <div className="text-right">
@@ -480,7 +611,11 @@ const AdminReports = () => {
                       </div>
                     </div>
                   );
-                }
+                })
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  No department data available
+                </p>
               )}
             </div>
           </div>
@@ -500,9 +635,11 @@ const AdminReports = () => {
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
                   On-Time Completion
                 </h3>
-                <p className="text-3xl font-bold text-blue-600">85%</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {calculatedStats.completionRate}%
+                </p>
                 <p className="text-xs text-gray-600 mt-2">
-                  Projects completed by deadline
+                  Projects completed successfully
                 </p>
               </div>
 
@@ -510,7 +647,16 @@ const AdminReports = () => {
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
                   Approval Rate
                 </h3>
-                <p className="text-3xl font-bold text-green-600">92%</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {stats.totalProjects > 0
+                    ? Math.round(
+                        (calculatedStats.completedProjects /
+                          stats.totalProjects) *
+                          100,
+                      )
+                    : 0}
+                  %
+                </p>
                 <p className="text-xs text-gray-600 mt-2">
                   Submitted projects approved
                 </p>
@@ -518,36 +664,46 @@ const AdminReports = () => {
 
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  Avg Feedback Time
+                  Recent Submissions
                 </h3>
-                <p className="text-3xl font-bold text-purple-600">2.5</p>
-                <p className="text-xs text-gray-600 mt-2">
-                  Days to receive feedback
+                <p className="text-3xl font-bold text-purple-600">
+                  {stats.recentSubmissions || 0}
                 </p>
+                <p className="text-xs text-gray-600 mt-2">Last 7 days</p>
               </div>
 
               <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  Student Satisfaction
+                  Pending Reviews
                 </h3>
-                <p className="text-3xl font-bold text-orange-600">4.2/5</p>
-                <p className="text-xs text-gray-600 mt-2">Average rating</p>
+                <p className="text-3xl font-bold text-orange-600">
+                  {stats.pendingReviews || 0}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">
+                  Awaiting evaluation
+                </p>
               </div>
 
               <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  Active Users
+                  Active Projects
                 </h3>
-                <p className="text-3xl font-bold text-red-600">96%</p>
-                <p className="text-xs text-gray-600 mt-2">Weekly active rate</p>
+                <p className="text-3xl font-bold text-red-600">
+                  {calculatedStats.inProgressProjects}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">
+                  Currently in progress
+                </p>
               </div>
 
               <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  System Uptime
+                  Total Users
                 </h3>
-                <p className="text-3xl font-bold text-indigo-600">99.9%</p>
-                <p className="text-xs text-gray-600 mt-2">Last 30 days</p>
+                <p className="text-3xl font-bold text-indigo-600">
+                  {(stats.totalStudents || 0) + (stats.totalSupervisors || 0)}
+                </p>
+                <p className="text-xs text-gray-600 mt-2">System-wide</p>
               </div>
             </div>
           </div>

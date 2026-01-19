@@ -1,20 +1,147 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { getProjectsByUser } from "../../mock/data";
+import { useAuth } from "../../context/useAuth";
+import { projectAPI, userAPI } from "../../services/api";
 
 const StudentProjects = () => {
   const { user } = useAuth();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [supervisors, setSupervisors] = useState([]);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    supervisorId: "",
+    department: user?.department || "",
+    expectedCompletionDate: "",
+    objectives: [""],
+    technologies: [""],
+  });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
-  const userProjects = getProjectsByUser(user?.id, "student");
+  useEffect(() => {
+    loadProjects();
+    loadSupervisors();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const response = await projectAPI.getAll();
+      if (response.success) {
+        setProjects(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSupervisors = async () => {
+    try {
+      const response = await userAPI.getSupervisors();
+      if (response.success) {
+        setSupervisors(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load supervisors:", error);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleArrayInput = (field, index, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: prev[field].map((item, i) => (i === index ? value : item)),
+    }));
+  };
+
+  const addArrayField = (field) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: [...prev[field], ""],
+    }));
+  };
+
+  const removeArrayField = (field, index) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    // Validation
+    if (!formData.title || !formData.supervisorId) {
+      setError("Please provide project title and select a supervisor.");
+      return;
+    }
+
+    try {
+      setCreating(true);
+
+      // Filter out empty objectives and technologies
+      const objectives = formData.objectives.filter((obj) => obj.trim() !== "");
+      const technologies = formData.technologies.filter(
+        (tech) => tech.trim() !== ""
+      );
+
+      const projectData = {
+        title: formData.title,
+        description: formData.description,
+        supervisorId: parseInt(formData.supervisorId),
+        department: formData.department,
+        expectedCompletionDate: formData.expectedCompletionDate || null,
+        objectives: objectives.length > 0 ? objectives : undefined,
+        technologies: technologies.length > 0 ? technologies : undefined,
+      };
+
+      const response = await projectAPI.create(projectData);
+
+      if (response.success) {
+        // Reload projects
+        await loadProjects();
+
+        // Reset form and close modal
+        setFormData({
+          title: "",
+          description: "",
+          supervisorId: "",
+          department: user?.department || "",
+          expectedCompletionDate: "",
+          objectives: [""],
+          technologies: [""],
+        });
+        setShowCreateModal(false);
+      } else {
+        setError(response.message || "Failed to create project");
+      }
+    } catch (error) {
+      setError(error.message || "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   // Filter projects by status
   const filteredProjects =
     filterStatus === "all"
-      ? userProjects
-      : userProjects.filter((p) => p.status === filterStatus);
+      ? projects
+      : projects.filter((p) => p.status === filterStatus);
 
   // Get status badge color
   const getStatusColor = (status) => {
@@ -29,6 +156,17 @@ const StudentProjects = () => {
     return colors[status] || colors.draft;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -41,7 +179,7 @@ const StudentProjects = () => {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center px-4 py-2 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          className="inline-flex items-center px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
         >
           <svg
             className="w-5 h-5 mr-2"
@@ -80,7 +218,7 @@ const StudentProjects = () => {
                 onClick={() => setFilterStatus(status)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   filterStatus === status
-                    ? "bg-violet-600 text-white"
+                    ? "bg-primary-600 text-white"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
@@ -191,31 +329,33 @@ const StudentProjects = () => {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-violet-600 h-2 rounded-full transition-all"
+                      className="bg-primary-600 h-2 rounded-full transition-all"
                       style={{ width: `${project.progress}%` }}
                     ></div>
                   </div>
                 </div>
 
                 {/* Technologies */}
-                <div className="mb-4">
-                  <p className="text-xs text-gray-500 mb-2">Technologies:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {project.technologies.slice(0, 4).map((tech, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                    {project.technologies.length > 4 && (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                        +{project.technologies.length - 4} more
-                      </span>
-                    )}
+                {project.technologies && project.technologies.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500 mb-2">Technologies:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {project.technologies.slice(0, 4).map((tech, index) => (
+                        <span
+                          key={index}
+                          className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                      {project.technologies.length > 4 && (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                          +{project.technologies.length - 4} more
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Documents */}
                 <div className="mb-4">
@@ -234,8 +374,8 @@ const StudentProjects = () => {
                       />
                     </svg>
                     <span>
-                      {project.documents.length} document
-                      {project.documents.length !== 1 ? "s" : ""} uploaded
+                      {project.documents?.length || 0} document
+                      {project.documents?.length !== 1 ? "s" : ""} uploaded
                     </span>
                   </div>
                 </div>
@@ -249,7 +389,7 @@ const StudentProjects = () => {
                 </div>
                 <Link
                   to={`/student/projects/${project.id}`}
-                  className="inline-flex items-center px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   View Details
                   <svg
@@ -298,7 +438,7 @@ const StudentProjects = () => {
           {filterStatus === "all" && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-6 inline-flex items-center px-4 py-2 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
+              className="mt-6 inline-flex items-center px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
             >
               <svg
                 className="w-5 h-5 mr-2"
@@ -319,31 +459,197 @@ const StudentProjects = () => {
         </div>
       )}
 
-      {/* Create Project Modal (Placeholder) */}
+      {/* Create Project Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-8">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Create New Project
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Project creation form will be implemented here. This is a
-              placeholder for demonstration.
-            </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="flex-1 px-4 py-2 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors"
-              >
-                Create
-              </button>
-            </div>
+
+            {error && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Project Title *
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  placeholder="Enter project title"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  placeholder="Describe your project"
+                />
+              </div>
+
+              {/* Supervisor */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Supervisor *
+                </label>
+                <select
+                  name="supervisorId"
+                  value={formData.supervisorId}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                >
+                  <option value="">Select a supervisor</option>
+                  {supervisors.map((sup) => (
+                    <option key={sup.id} value={sup.id}>
+                      {sup.title} {sup.name} -{" "}
+                      {sup.specialization || sup.department}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  name="department"
+                  value={formData.department}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  placeholder="Department"
+                />
+              </div>
+
+              {/* Expected Completion Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Expected Completion Date
+                </label>
+                <input
+                  type="date"
+                  name="expectedCompletionDate"
+                  value={formData.expectedCompletionDate}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                />
+              </div>
+
+              {/* Objectives */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Objectives
+                </label>
+                {formData.objectives.map((objective, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={objective}
+                      onChange={(e) =>
+                        handleArrayInput("objectives", index, e.target.value)
+                      }
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                      placeholder={`Objective ${index + 1}`}
+                    />
+                    {formData.objectives.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeArrayField("objectives", index)}
+                        className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addArrayField("objectives")}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  + Add Objective
+                </button>
+              </div>
+
+              {/* Technologies */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Technologies
+                </label>
+                {formData.technologies.map((tech, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={tech}
+                      onChange={(e) =>
+                        handleArrayInput("technologies", index, e.target.value)
+                      }
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                      placeholder={`Technology ${index + 1}`}
+                    />
+                    {formData.technologies.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeArrayField("technologies", index)}
+                        className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addArrayField("technologies")}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  + Add Technology
+                </button>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setError("");
+                  }}
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  {creating ? "Creating..." : "Create Project"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

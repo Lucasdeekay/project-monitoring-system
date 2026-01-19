@@ -1,22 +1,62 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { getProjectsByUser } from "../../mock/data";
+import React, { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../context/useAuth";
+import api from "../../services/api";
 
 const SupervisorProjects = () => {
   const { user } = useAuth();
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [filterStatus, setFilterStatus] = useState(
+    searchParams.get("status") || "all",
+  );
   const [searchQuery, setSearchQuery] = useState("");
 
-  const supervisedProjects = getProjectsByUser(user?.id, "supervisor");
+  useEffect(() => {
+    fetchProjects();
+  }, [user?.id]);
+
+  useEffect(() => {
+    // Update URL when filter changes
+    if (filterStatus !== "all") {
+      setSearchParams({ status: filterStatus });
+    } else {
+      setSearchParams({});
+    }
+  }, [filterStatus, setSearchParams]);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch projects supervised by current user
+      const response = await api.get("/projects", {
+        params: {
+          supervisorId: user?.id,
+        },
+      });
+
+      setProjects(response.data || []);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError(err.message || "Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter projects by status and search
-  const filteredProjects = supervisedProjects.filter((project) => {
+  const filteredProjects = projects.filter((project) => {
     const matchesStatus =
       filterStatus === "all" || project.status === filterStatus;
     const matchesSearch =
       project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.studentName.toLowerCase().includes(searchQuery.toLowerCase());
+      project.studentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
@@ -47,6 +87,48 @@ const SupervisorProjects = () => {
     return null;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+        <div className="flex">
+          <svg
+            className="h-5 w-5 text-red-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">
+              Error loading projects
+            </h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <button
+              onClick={fetchProjects}
+              className="mt-2 text-sm text-red-600 hover:text-red-500 font-medium"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -62,7 +144,7 @@ const SupervisorProjects = () => {
         <div className="text-right">
           <p className="text-sm text-gray-600">Total Projects</p>
           <p className="text-3xl font-bold text-violet-600">
-            {supervisedProjects.length}
+            {projects.length}
           </p>
         </div>
       </div>
@@ -169,8 +251,7 @@ const SupervisorProjects = () => {
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
           Showing <span className="font-medium">{filteredProjects.length}</span>{" "}
-          of <span className="font-medium">{supervisedProjects.length}</span>{" "}
-          projects
+          of <span className="font-medium">{projects.length}</span> projects
         </p>
         {searchQuery && (
           <button
@@ -247,6 +328,12 @@ const SupervisorProjects = () => {
                                 />
                               </svg>
                               <span>{project.studentName}</span>
+                              {project.matricNumber && (
+                                <>
+                                  <span className="mx-2">•</span>
+                                  <span>{project.matricNumber}</span>
+                                </>
+                              )}
                               <span className="mx-2">•</span>
                               <span>{project.department}</span>
                             </div>
@@ -256,7 +343,7 @@ const SupervisorProjects = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            project.status
+                            project.status,
                           )}`}
                         >
                           {project.status.replace("_", " ").toUpperCase()}
@@ -272,14 +359,14 @@ const SupervisorProjects = () => {
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-2">
                               <div
-                                className={`h-2 rounded-full ${
+                                className={`h-2 rounded-full transition-all ${
                                   project.progress >= 75
                                     ? "bg-green-500"
                                     : project.progress >= 50
-                                    ? "bg-blue-500"
-                                    : project.progress >= 25
-                                    ? "bg-yellow-500"
-                                    : "bg-red-500"
+                                      ? "bg-blue-500"
+                                      : project.progress >= 25
+                                        ? "bg-yellow-500"
+                                        : "bg-red-500"
                                 }`}
                                 style={{ width: `${project.progress}%` }}
                               ></div>
@@ -288,7 +375,9 @@ const SupervisorProjects = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {new Date(project.updatedAt).toLocaleDateString()}
+                        {project.updatedAt
+                          ? new Date(project.updatedAt).toLocaleDateString()
+                          : "N/A"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -300,9 +389,12 @@ const SupervisorProjects = () => {
                           </Link>
                           {(project.status === "submitted" ||
                             project.status === "under_review") && (
-                            <button className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors">
+                            <Link
+                              to={`/supervisor/projects/${project.id}?tab=evaluation`}
+                              className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                            >
                               Evaluate
-                            </button>
+                            </Link>
                           )}
                         </div>
                       </td>
@@ -332,15 +424,15 @@ const SupervisorProjects = () => {
             {searchQuery
               ? "No matching projects found"
               : filterStatus === "all"
-              ? "No supervised projects yet"
-              : `No ${filterStatus.replace("_", " ")} projects`}
+                ? "No supervised projects yet"
+                : `No ${filterStatus.replace("_", " ")} projects`}
           </h3>
           <p className="mt-2 text-sm text-gray-500">
             {searchQuery
               ? "Try adjusting your search criteria."
               : filterStatus === "all"
-              ? "Projects will appear here once students are assigned to you."
-              : "Try selecting a different filter to see more projects."}
+                ? "Projects will appear here once students are assigned to you."
+                : "Try selecting a different filter to see more projects."}
           </p>
           {(searchQuery || filterStatus !== "all") && (
             <button
