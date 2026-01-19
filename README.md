@@ -41,7 +41,7 @@ A comprehensive web application for monitoring and managing academic projects wi
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/Lucasdeekay/project-monitoring-system.git
 cd project-monitoring-system
 ```
 
