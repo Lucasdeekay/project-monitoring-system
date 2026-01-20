@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect } from 'react'
 import { authAPI, clearAuth, isAuthenticated } from '../services/api'
 
 // Create the Auth Context
-const AuthContext = createContext(null)
+export const AuthContext = createContext(null)
 
 // AuthProvider component to wrap the app
 export const AuthProvider = ({ children }) => {
